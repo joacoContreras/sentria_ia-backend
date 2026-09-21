@@ -1,11 +1,3 @@
--- =====================================================================
--- Sentria IA — Esquema PostgreSQL (MVP completo)
--- Actividad: "Diseñar esquema en PostgreSQL garantizando la integridad
---             referencial absoluta"  (RNF-02)
--- PKs: bigint IDENTITY | Reglas de negocio: en Express (no triggers)
--- La DB sólo impone integridad DECLARATIVA: PK, FK, UNIQUE, CHECK, EXCLUDE.
--- Motor: PostgreSQL 15+ (Supabase / Render)
--- =====================================================================
 
 BEGIN;
 
@@ -36,8 +28,14 @@ CREATE TYPE estado_turno   AS ENUM ('reservado','en_espera','atendido','ausente'
 CREATE TYPE canal_origen   AS ENUM ('web','bot_ia','recepcion','call_center');
 CREATE TYPE tipo_excepcion AS ENUM ('licencia','feriado','ausencia','bloqueo');
 CREATE TYPE nivel_triage   AS ENUM ('verde','amarillo','rojo');
+CREATE TYPE conducta_triage AS ENUM ('guardia_inmediata','consulta_24h','telemedicina','autocuidado');
+CREATE TYPE estado_triage  AS ENUM ('evaluado','en_espera','en_atencion','completado','derivado');
 CREATE TYPE canal_notif    AS ENUM ('email','sms','whatsapp','push');
 CREATE TYPE estado_notif   AS ENUM ('pendiente','enviada','fallida','cancelada');
+CREATE TYPE tipo_registro_medico AS ENUM ('laboratorio','imagenologia','diagnostico','receta','evolucion');
+CREATE TYPE categoria_ticket AS ENUM ('turnos','acceso','cobertura','laboratorio','triage','facturacion','otro');
+CREATE TYPE prioridad_ticket AS ENUM ('normal','urgente');
+CREATE TYPE estado_ticket    AS ENUM ('abierto','en_proceso','resuelto','cerrado');
 
 -- =====================================================================
 -- 2. CATÁLOGOS INSTITUCIONALES (RF-12)
@@ -168,10 +166,11 @@ CREATE TABLE paciente (                      -- RF-01
   nro_documento    text NOT NULL,
   nombre           text NOT NULL,
   apellido         text NOT NULL,
-  fecha_nacimiento date NOT NULL,
+  fecha_nacimiento date,                     -- el registro web no la pide
   email            email_t,
   telefono         telefono_t,
   password_hash    text,                     -- NULL = alta por bot, sin cuenta
+  terminos_aceptados_en timestamptz,         -- Ley 25.326
   activo           boolean NOT NULL DEFAULT true,
   creado_en        timestamptz NOT NULL DEFAULT now(),
   actualizado_en   timestamptz NOT NULL DEFAULT now(),
@@ -181,8 +180,27 @@ CREATE TABLE paciente (                      -- RF-01
   CONSTRAINT paciente_fecha_nac_ck
     CHECK (fecha_nacimiento > date '1900-01-01' AND fecha_nacimiento <= current_date),
   CONSTRAINT paciente_contacto_ck  CHECK (email IS NOT NULL OR telefono IS NOT NULL),
-  CONSTRAINT paciente_login_ck     CHECK (password_hash IS NULL OR email IS NOT NULL)
+  CONSTRAINT paciente_login_ck     CHECK (password_hash IS NULL OR email IS NOT NULL),
+  -- quien tiene cuenta tuvo que aceptar los términos
+  CONSTRAINT paciente_terminos_ck  CHECK (password_hash IS NULL OR terminos_aceptados_en IS NOT NULL)
 );
+
+-- Recuperación de contraseña. Se guarda el HASH del token (sha256), nunca
+-- el token en claro: si se filtra la tabla, los links no sirven.
+CREATE TABLE password_reset (
+  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  paciente_id bigint NOT NULL,
+  token_hash  text NOT NULL,
+  expira_en   timestamptz NOT NULL,
+  usado_en    timestamptz,
+  creado_en   timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT pwd_reset_paciente_fk FOREIGN KEY (paciente_id)
+    REFERENCES paciente (id) ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT pwd_reset_token_uk  UNIQUE (token_hash),
+  CONSTRAINT pwd_reset_expira_ck CHECK (expira_en > creado_en),
+  CONSTRAINT pwd_reset_uso_ck    CHECK (usado_en IS NULL OR usado_en >= creado_en)
+);
+CREATE INDEX pwd_reset_paciente_idx ON password_reset (paciente_id);
 
 CREATE TABLE paciente_cobertura (            -- afiliación (RF-01)
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -371,10 +389,13 @@ CREATE TABLE sesion_ia (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   paciente_id   bigint,                      -- NULL = visitante anónimo
   canal         canal_origen NOT NULL DEFAULT 'bot_ia',
+  operador_id   bigint,                      -- NOT NULL = la tomó un humano
   iniciada_en   timestamptz NOT NULL DEFAULT now(),
-  finalizada_en timestamptz,
+  finalizada_en timestamptz,                 -- NULL = activa
   CONSTRAINT sesion_ia_paciente_fk FOREIGN KEY (paciente_id)
     REFERENCES paciente (id) ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT sesion_ia_operador_fk FOREIGN KEY (operador_id)
+    REFERENCES usuario (id) ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT sesion_ia_rango_ck CHECK (finalizada_en IS NULL OR finalizada_en >= iniciada_en)
 );
 CREATE INDEX sesion_ia_paciente_idx ON sesion_ia (paciente_id, iniciada_en DESC);
@@ -385,37 +406,60 @@ CREATE TABLE mensaje_ia (
   rol       text NOT NULL,
   contenido text NOT NULL,
   tokens    integer,
+  es_emergencia boolean NOT NULL DEFAULT false,   -- disparó protocolo 911
+  acciones  jsonb NOT NULL DEFAULT '[]'::jsonb,   -- botones [{label, action}]
   creado_en timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT mensaje_ia_sesion_fk FOREIGN KEY (sesion_id)
     REFERENCES sesion_ia (id) ON UPDATE CASCADE ON DELETE CASCADE,
-  CONSTRAINT mensaje_ia_rol_ck    CHECK (rol IN ('user','assistant','system','tool')),
-  CONSTRAINT mensaje_ia_tokens_ck CHECK (tokens IS NULL OR tokens >= 0)
+  -- 'operador' = mensaje escrito por un humano del staff
+  CONSTRAINT mensaje_ia_rol_ck    CHECK (rol IN ('user','assistant','operador','system','tool')),
+  CONSTRAINT mensaje_ia_tokens_ck CHECK (tokens IS NULL OR tokens >= 0),
+  CONSTRAINT mensaje_ia_acciones_ck CHECK (jsonb_typeof(acciones) = 'array')
 );
 CREATE INDEX mensaje_ia_sesion_idx ON mensaje_ia (sesion_id, creado_en);
 
 CREATE TABLE triage_evaluacion (
   id                       bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  sesion_id                bigint NOT NULL,
+  sesion_id                bigint,             -- NULL = triage desde el portal
   paciente_id              bigint,
-  nivel                    nivel_triage NOT NULL,
+  -- ESI v4 (1 = resucitación … 5 = no urgente). Es lo que usa el front.
+  nivel_esi                smallint NOT NULL,
+  -- Semáforo derivado del ESI: nunca se desincroniza.
+  nivel nivel_triage GENERATED ALWAYS AS (
+    CASE WHEN nivel_esi <= 2 THEN 'rojo'::nivel_triage
+         WHEN nivel_esi = 3  THEN 'amarillo'::nivel_triage
+         ELSE 'verde'::nivel_triage END
+  ) STORED,
+  motivo_consulta          text NOT NULL,      -- síntoma guía
   sintomas                 jsonb NOT NULL DEFAULT '[]'::jsonb,
+  -- {heart_rate, bp_systolic, bp_diastolic, o2_sat, temp, respiratory_rate}
+  signos_vitales           jsonb,
+  recomendacion_ia         text NOT NULL,
+  conducta_sugerida        conducta_triage NOT NULL,
+  estado                   estado_triage NOT NULL DEFAULT 'evaluado',
   especialidad_sugerida_id bigint,
   alerta_emergencia        boolean NOT NULL DEFAULT false,
   turno_generado_id        bigint,
   creado_en                timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT triage_sesion_fk FOREIGN KEY (sesion_id)
     REFERENCES sesion_ia (id) ON UPDATE CASCADE ON DELETE CASCADE,
+  -- RESTRICT: es dato clínico, igual que registro_medico
   CONSTRAINT triage_paciente_fk FOREIGN KEY (paciente_id)
-    REFERENCES paciente (id) ON UPDATE CASCADE ON DELETE SET NULL,
+    REFERENCES paciente (id) ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT triage_especialidad_fk FOREIGN KEY (especialidad_sugerida_id)
     REFERENCES especialidad (id) ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT triage_turno_fk FOREIGN KEY (turno_generado_id)
     REFERENCES turno (id) ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT triage_esi_ck      CHECK (nivel_esi BETWEEN 1 AND 5),
   CONSTRAINT triage_sintomas_ck CHECK (jsonb_typeof(sintomas) = 'array'),
-  -- RF-07: nivel rojo obliga a alerta de emergencia
-  CONSTRAINT triage_alerta_ck CHECK (nivel <> 'rojo' OR alerta_emergencia)
+  CONSTRAINT triage_vitales_ck  CHECK (signos_vitales IS NULL OR jsonb_typeof(signos_vitales) = 'object'),
+  -- viene del chat o de un paciente logueado; nunca de la nada
+  CONSTRAINT triage_origen_ck   CHECK (sesion_id IS NOT NULL OR paciente_id IS NOT NULL),
+  -- RF-07: nivel rojo (ESI 1-2) obliga a alerta de emergencia
+  CONSTRAINT triage_alerta_ck CHECK (nivel_esi > 2 OR alerta_emergencia)
 );
-CREATE INDEX triage_sesion_idx ON triage_evaluacion (sesion_id);
+CREATE INDEX triage_sesion_idx   ON triage_evaluacion (sesion_id);
+CREATE INDEX triage_paciente_idx ON triage_evaluacion (paciente_id, creado_en DESC);
 
 CREATE TABLE notificacion (                  -- RF-05
   id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -447,7 +491,67 @@ CREATE TABLE config_ia (                     -- RF-13
 );
 
 -- =====================================================================
--- 7. Verificación (auditar que ninguna FK quede sin acción declarada)
+-- 7. HISTORIA CLÍNICA Y SOPORTE
+-- =====================================================================
+
+-- Estudios e informes del paciente. ON DELETE RESTRICT: la historia
+-- clínica se conserva por ley (Ley 26.529); el paciente se da de baja
+-- lógica (activo = false), no se borra.
+CREATE TABLE registro_medico (
+  id                  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  paciente_id         bigint NOT NULL,
+  titulo              text NOT NULL,          -- "Hemograma completo"
+  tipo                tipo_registro_medico NOT NULL,
+  archivo_url         text NOT NULL,          -- S3/GCS; la URL firmada la genera Express
+  archivo_nombre      text NOT NULL,
+  archivo_bytes       integer NOT NULL,
+  profesional_id      bigint,                 -- médico de la institución
+  profesional_externo text,                   -- o nombre libre si es de afuera
+  fecha_registro      date NOT NULL,          -- fecha de realización
+  cargado_por         bigint,
+  creado_en           timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT reg_med_paciente_fk FOREIGN KEY (paciente_id)
+    REFERENCES paciente (id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT reg_med_profesional_fk FOREIGN KEY (profesional_id)
+    REFERENCES profesional (id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT reg_med_cargado_por_fk FOREIGN KEY (cargado_por)
+    REFERENCES usuario (id) ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT reg_med_bytes_ck       CHECK (archivo_bytes > 0),
+  CONSTRAINT reg_med_fecha_ck       CHECK (fecha_registro <= current_date),
+  CONSTRAINT reg_med_profesional_ck CHECK (num_nonnulls(profesional_id, profesional_externo) <= 1)
+);
+CREATE INDEX reg_med_paciente_idx ON registro_medico (paciente_id, fecha_registro DESC);
+
+-- Mesa de ayuda. paciente_id NULL = contacto sin loguearse.
+CREATE TABLE ticket_soporte (
+  id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  paciente_id     bigint,
+  codigo          text NOT NULL,              -- 'TKT-584912', lo ve el usuario
+  nombre          text NOT NULL,
+  email           email_t NOT NULL,
+  categoria       categoria_ticket NOT NULL,
+  prioridad       prioridad_ticket NOT NULL DEFAULT 'normal',
+  asunto          text NOT NULL,
+  mensaje         text NOT NULL,
+  adjunto_url     text,                       -- hasta 10MB (lo valida Express)
+  adjunto_nombre  text,
+  estado          estado_ticket NOT NULL DEFAULT 'abierto',
+  asignado_a      bigint,
+  creado_en       timestamptz NOT NULL DEFAULT now(),
+  actualizado_en  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ticket_paciente_fk FOREIGN KEY (paciente_id)
+    REFERENCES paciente (id) ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT ticket_asignado_fk FOREIGN KEY (asignado_a)
+    REFERENCES usuario (id) ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT ticket_codigo_uk  UNIQUE (codigo),
+  CONSTRAINT ticket_codigo_ck  CHECK (codigo ~ '^TKT-[0-9]{6,}$'),
+  CONSTRAINT ticket_adjunto_ck CHECK (num_nulls(adjunto_url, adjunto_nombre) IN (0, 2))
+);
+CREATE INDEX ticket_estado_idx   ON ticket_soporte (estado, creado_en);
+CREATE INDEX ticket_paciente_idx ON ticket_soporte (paciente_id);
+
+-- =====================================================================
+-- 8. Verificación (auditar que ninguna FK quede sin acción declarada)
 -- =====================================================================
 -- SELECT conrelid::regclass AS tabla, conname, confupdtype, confdeltype
 -- FROM pg_constraint
