@@ -22,3 +22,14 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+
+# Java / Maven
+target/
+*.class
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+bin/
