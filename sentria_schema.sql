@@ -363,7 +363,7 @@ CREATE INDEX turno_paciente_idx    ON turno (paciente_id, inicio DESC);
 CREATE INDEX turno_estado_idx      ON turno (estado, inicio);
 CREATE INDEX turno_sede_inicio_idx ON turno (sede_id, inicio);
 
--- Bitácora de estados (RF-09). La escribe Express en la misma transacción.
+-- Bitácora de estados (RF-09). La escriben reservar_turno / cambiar_estado_turno.
 CREATE TABLE turno_evento (
   id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   turno_id        bigint NOT NULL,
@@ -502,7 +502,7 @@ CREATE TABLE registro_medico (
   paciente_id         bigint NOT NULL,
   titulo              text NOT NULL,          -- "Hemograma completo"
   tipo                tipo_registro_medico NOT NULL,
-  archivo_url         text NOT NULL,          -- S3/GCS; la URL firmada la genera Express
+  archivo_url         text NOT NULL,          -- S3/GCS; la URL firmada la genera el backend
   archivo_nombre      text NOT NULL,
   archivo_bytes       integer NOT NULL,
   profesional_id      bigint,                 -- médico de la institución
@@ -533,7 +533,7 @@ CREATE TABLE ticket_soporte (
   prioridad       prioridad_ticket NOT NULL DEFAULT 'normal',
   asunto          text NOT NULL,
   mensaje         text NOT NULL,
-  adjunto_url     text,                       -- hasta 10MB (lo valida Express)
+  adjunto_url     text,                       -- hasta 10MB (lo valida el backend)
   adjunto_nombre  text,
   estado          estado_ticket NOT NULL DEFAULT 'abierto',
   asignado_a      bigint,
