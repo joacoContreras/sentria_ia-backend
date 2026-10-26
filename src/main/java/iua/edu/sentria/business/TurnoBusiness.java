@@ -42,6 +42,9 @@ public class TurnoBusiness implements ITurnoBusiness {
     @Autowired
     private TurnoRepository turnoDAO;
 
+    @Autowired
+    private INotificacionBusiness notificacionBusiness;
+
     private final TransactionTemplate tx;
 
     @Value("${sentria.turnos.reintentos:3}")
@@ -74,12 +77,22 @@ public class TurnoBusiness implements ITurnoBusiness {
     public Turno reservar(ReservaTurnoRequest r)
             throws NotFoundException, ConflictException, InvalidException, BusinessException {
         CanalOrigen canal = r.canal() == null ? CanalOrigen.web : r.canal();
-        return ejecutar(() -> {
+        Turno turno = ejecutar(() -> {
             Long id = turnoDAO.reservarTurno(r.pacienteId(), r.profesionalId(), r.especialidadId(),
                     r.consultorioId(), r.inicio(), r.pacienteCoberturaId(), canal.name(),
                     r.esSobreturno(), r.motivoConsulta(), r.creadoPor());
+            // Misma transacción: si el turno commitea, sus notificaciones también (RF-05)
+            notificacionBusiness.programar(id);
             return turnoDAO.findById(id).orElseThrow();
         });
+        // Ya commiteado: el envío corre en otro hilo y ningún fallo vuelve acá (CA4)
+        try {
+            notificacionBusiness.despacharTurno(turno.getId());
+        } catch (RuntimeException e) {
+            log.warn("No se pudo iniciar el envío de la confirmación del turno id={}; lo reintenta el scheduler",
+                    turno.getId(), e);
+        }
+        return turno;
     }
 
     @Override
