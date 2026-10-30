@@ -1,0 +1,49 @@
+# RF-07 - Signos de alarma que activan la Alerta de Emergencia.
+# Una expresión regular por línea; se evalúan sobre el texto normalizado
+# (minúsculas, sin tildes, espacios colapsados). Este filtro tiene prioridad
+# sobre todos los demás: ante la duda se prefiere un falso positivo (derivar
+# a guardia) antes que un falso negativo.
+
+# Dolor torácico / opresión en el pecho
+\b(dolor\w*|duel\w*|doli\w*)\s+(\w+\s+){0,4}pecho\b
+\bdolor\s+(toracico|precordial)\b
+\b(opresion|presion|puntada|aprieta|apreton|peso|ardor)\w*\s+(\w+\s+){0,3}pecho\b
+\bpecho\s+(\w+\s+){0,2}(oprimido|apretado|aprieta|duele)\b
+\b(infarto|ataque\s+(al\s+corazon|cardiaco|de\s+corazon))\b
+
+# Dificultad respiratoria
+\b(no|casi\s+no|apenas)\s+(puedo|puede|podia|podemos)\s+respirar\b
+\b(me|le|nos)\s+cuesta\s+(\w+\s+){0,2}respirar\b
+\bdificultad\w*\s+(\w+\s+){0,2}respirar\b
+\bdificultad\s+respiratoria\b
+\b(me|le|se\s+me|se\s+le)\s+(falta|faltaba|va)\s+(el\s+)?aire\b
+\bfalta\s+de\s+aire\b
+\b(me\s+ahogo|me\s+estoy\s+ahogando|se\s+(esta\s+)?ahoga\w*|asfixi\w*)\b
+\bsin\s+poder\s+respirar\b
+\b(labios|unas|cara)\s+(\w+\s+){0,2}(morad\w*|azul\w*)\b
+
+# Pérdida de conciencia
+\bperd\w*\s+(el\s+|la\s+)?(conocimiento|conciencia|sentido)\b
+\bperdida\s+de\s+(la\s+)?(conciencia|conocimiento)\b
+\b(me|se|le)\s+desmay\w*\b
+\bdesmayo\w*\b
+\b(inconsciente|no\s+reacciona|no\s+despierta)\b
+
+# Convulsiones
+\bconvuls\w*\b
+\b(ataque|crisis)\s+(de\s+)?epilep\w*\b
+
+# Parálisis facial / signos de ACV
+\bparalisis\s+(facial|de\s+(la\s+)?cara|de\s+medio\s+cuerpo|de\s+un\s+lado)\b
+\b(se\s+me|se\s+le)\s+(paraliz\w*|torci\w*|cayo|durmio|deform\w*)\s+(la\s+|media\s+|el\s+|un\s+)?(cara|boca|rostro|lado|brazo|pierna)\b
+\b(cara|boca)\s+(torcida|paralizada|caida|dormida|deformada)\b
+\b(no\s+(puedo|puede)\s+mover|debilidad\s+(repentina\s+|subita\s+)?(en|de))\s+(\w+\s+){0,2}(brazo|pierna|lado|mitad|cara|cuerpo)\b
+\b(habla\s+(arrastrada|trabada)|arrastra\s+las\s+palabras|se\s+le\s+traba\s+la\s+lengua)\b
+\b(acv|ataque\s+cerebr\w*|derrame\s+cerebral)\b
+
+# Hemorragias
+\b(hemorragia|sangrado\s+(\w+\s+)?(abundante|que\s+no\s+para|fuerte|intenso)|sangr\w*\s+(mucho|sin\s+parar))\b
+\b(vomit\w*|tos\w*|escup\w*)\s+(\w+\s+){0,1}sangre\b
+
+# Riesgo de autolesión
+\b(suicid\w*|quitarme\s+la\s+vida|matarme|no\s+quiero\s+(seguir\s+)?vivir|hacerme\s+dano|lastimarme)\b

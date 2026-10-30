@@ -1,0 +1,25 @@
+# RNF-07 - Pedidos de diagnóstico, tratamiento, fármacos, recetas u órdenes.
+# Se evalúan sobre el último mensaje del paciente. No bloquean la descripción
+# de síntomas (eso es triage, RF-06): solo el pedido explícito de acto médico.
+
+# Recetas, órdenes y certificados
+\b(hace\w*|haz\w*|da\w*|escrib\w*|mand\w*|pas\w*|gener\w*|emit\w*|redact\w*|firm\w*|necesito|quiero|preciso|podes\s+hacer\w*|podrias\s+hacer\w*|me\s+podes\s+dar|me\s+das|me\s+haces)\s+(\w+\s+){0,4}(recetas?|prescripcion\w*|orden\s+(medica|de\s+laboratorio|de\s+estudio\w*|de\s+analisis|para\s+(un|una|el|la|hacer\w*))|certificado\s+medico)\b
+\b(recetame|recetarme|recetale|prescribime|prescribirme)\b
+
+# Medicamentos y dosis
+\b(que|cual|cuales|cuanto|cuanta|algun|alguna)\s+(\w+\s+){0,2}(medicamento|medicacion|remedio|pastilla|antibiotico|analgesico|antiinflamatorio|jarabe|crema|pomada|gotas|inyeccion|tratamiento)s?\b
+\b(puedo|debo|tengo\s+que|deberia|conviene|me\s+conviene|sirve)\s+(\w+\s+){0,1}(tomar|tomarme|aplicar\w*|usar|ponerme)\s+(\w+\s+){0,2}(ibuprofeno|paracetamol|aspirina|amoxicilina|antibiotico\w*|diclofenac\w*|omeprazol|clonazepam|antihistaminico\w*|corticoide\w*|remedio|pastilla|medicamento|algo)\b
+\b(cuantos?|cuantas?|que)\s+(mg|miligramos|ml|gotas|comprimidos|pastillas|capsulas)\b
+\b(que|cual|cuanta)\s+dosis\b
+\bdosis\s+de\s+(\w+\s+){0,1}(ibuprofeno|paracetamol|aspirina|amoxicilina|antibiotico\w*|diclofenac\w*|medicamento|remedio)\b
+\bcomo\s+(me\s+)?(curo|trato|tratar|curar)\b
+
+# Diagnósticos
+\b(dame|haceme|necesito|quiero|decime|cual\s+es)\s+(\w+\s+){0,2}diagnostico\b
+\b(diagnosticame|diagnosticarme|diagnosticalo|diagnosticala)\b
+\b(que|cual)\s+(enfermedad|infeccion|patologia|virus|bacteria|cuadro)\s+(\w+\s+){0,2}(tengo|tendre|tendria|tiene|sera|seria|es)\b
+\b(decime|deci|dime|sabes|adivina)\s+(que|lo\s+que)\s+tengo\b
+\b(tengo|tendre|sera|es)\s+(un\s+|una\s+)?(cancer|tumor|covid|otitis|gripe|neumonia|diabetes|infeccion|virus)\s*\?
+
+# Interpretación de estudios
+\b(interpret\w*|lee\w*|analiz\w*|explic\w*|que\s+significa\w*)\s+(\w+\s+){0,3}(resultados?|valores)\b

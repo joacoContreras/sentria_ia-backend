@@ -1,0 +1,28 @@
+# CA1 - Intentos de Prompt Injection / jailbreak.
+# Se evalúan sobre TODOS los mensajes del historial (el cliente podría
+# falsificar turnos previos del asistente). Texto normalizado.
+
+# "Olvidá / ignorá tus instrucciones previas"
+\b(olvid\w*|ignor\w*|omit\w*|descart\w*|saltea\w*|anul\w*|desactiv\w*|borr\w*|elimin\w*|deja\s+de\s+lado)\s+(\w+\s+){0,3}(instrucciones|reglas|indicaciones|restricciones|directivas|politicas|prompt|filtros|limitaciones)\b
+\b(ignore|forget|disregard|bypass|override|skip)\s+(\w+\s+){0,3}(instructions|rules|prompt|guidelines|restrictions|guardrails)\b
+
+# Cambio de rol: "actuá como médico", "ahora sos doctor"
+\b(actua\w*|comportate|responde\w*|habla\w*|contesta\w*|fingi\w*|simula\w*)\s+(\w+\s+){0,1}como\s+(si\s+fueras\s+)?(un\s+|una\s+|mi\s+|el\s+|la\s+)?(medic\w*|doctor\w*|farmaceutic\w*|enfermer\w*|psicolog\w*|psiquiatra|especialista|profesional\s+de\s+la\s+salud|otro\s+asistente|chatgpt|una?\s+ia\s+sin)\b
+\b(ahora\s+(sos|eres)|vas\s+a\s+ser|seras|quiero\s+que\s+seas)\s+(un\s+|una\s+|mi\s+)?(medic\w*|doctor\w*|farmaceutic\w*|enfermer\w*|asistente\s+sin)\b
+\b(hace|haz|hagamos)\s+de\s+cuenta\s+que\s+(sos|eres|no\s+tenes)\b
+\b(a\s+partir\s+de\s+ahora|desde\s+ahora|de\s+ahora\s+en\s+mas)\s+(sos|eres|vas\s+a|tu\s+rol|actua|responde|ignora|olvida)\b
+\b(you\s+are\s+now|act\s+as|pretend\s+(to\s+be|you\s+are)|roleplay\s+as|from\s+now\s+on\s+you)\b
+\bjuego\s+de\s+rol\b
+
+# Modos de elusión
+\b(modo|mode)\s+(desarrollador|developer|dios|god|dan|sin\s+restricciones|sin\s+filtros|admin\w*|debug|depuracion|libre)\b
+\b(jailbreak|do\s+anything\s+now)\b
+\bsin\s+(restricciones|filtros|censura|limites|reglas)\b
+
+# Extracción del prompt del sistema
+\b(mostr\w*|revel\w*|imprim\w*|repet\w*|decime|dame|copi\w*|escrib\w*|resum\w*|reveal|print|show|repeat|output)\s+(\w+\s+){0,3}(system\s+prompt|prompt\s+del\s+sistema|prompt\s+de\s+sistema|tu\s+prompt|instrucciones\s+(del\s+sistema|iniciales|previas|originales|internas|ocultas)|tus\s+instrucciones|tus\s+reglas|your\s+(instructions|prompt|rules))\b
+
+# Marcadores de rol / delimitadores de plantillas de chat
+(<\|im_start\|>|<\|im_end\|>|<\|system\|>|<\|endoftext\|>|\[inst\]|\[/inst\]|<<sys>>|</?system>)
+^\s*#*\s*(system|sistema|developer|desarrollador|assistant|asistente)\s*:
+\b(nuevas?\s+instrucciones|instrucciones\s+nuevas|new\s+instructions|instrucciones\s+del\s+administrador)\s*:
