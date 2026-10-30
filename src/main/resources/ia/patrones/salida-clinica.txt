@@ -1,0 +1,17 @@
+# Guardrail de SALIDA: si la respuesta del modelo contiene alguno de estos
+# patrones se descarta y se responde un rechazo fijo. Defensa en profundidad
+# ante una alucinación o una inyección que haya eludido el filtro de entrada.
+
+# Dosis y posologías
+\b\d+([.,]\d+)?\s*(mg|mcg|ug|ml|gr|ui|miligramos|microgramos|mililitros|gramos|gotas|comprimidos?|capsulas?|pastillas?)\b
+\bcada\s+\d+\s*(h|hs|horas)\b
+
+# Indicaciones farmacológicas
+\b(toma|tomate|tomar|tome|tomes|aplica|aplicate|aplicar|usa|use|ponete)\s+(\w+\s+){0,2}(ibuprofeno|paracetamol|aspirina|amoxicilina|antibiotico\w*|diclofenac\w*|omeprazol|clonazepam|antihistaminico\w*|corticoide\w*|antiinflamatorio\w*|analgesico\w*|jarabe|pomada)\b
+\b(te|le)\s+(receto|prescribo|indico\s+tomar|recomiendo\s+tomar|aconsejo\s+tomar)\b
+
+# Diagnósticos
+\b(tu|su|el)\s+diagnostico\s+(es|seria|probable)\b
+\b(probablemente|seguramente|posiblemente|parece\s+que|puede\s+que|podria\s+ser\s+que|todo\s+indica\s+que)\s+(usted\s+|vos\s+)?(tenes|tengas|tiene|tenga|padeces|padece|sufris|sufre|sea|se\s+trate\s+de)\s+(un|una|algo\s+de)\b
+\b(tenes|tiene|padeces|padece|sufris|sufre)\s+(una?\s+)?(otitis|infeccion|gripe|covid|neumonia|faringitis|sinusitis|migrana|gastritis|bronquitis|anginas|diabetes|hipertension|cancer|tumor|depresion|ansiedad)\b
+\b(es\s+un\s+cuadro\s+de|cuadro\s+compatible\s+con)\b

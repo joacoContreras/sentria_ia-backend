@@ -41,6 +41,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sentria}
       SPRING_JPA_SHOW_SQL: "false"
       DEV_INFO_ENABLED: "false"   # no exponer stack traces en las respuestas
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     ports:
       - "8080:8080"
 
