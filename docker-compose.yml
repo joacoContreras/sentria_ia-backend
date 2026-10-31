@@ -35,7 +35,8 @@ services:
     environment:
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: "1025"
-      SENTRIA_PORTAL_URL: ${PORTAL_URL:-http://localhost:5173}
+      SENTRIA_PORTAL_URL: ${PORTAL_URL:-http://localhost:3000}
+      SENTRIA_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,https://sentria-ia-frontend.vercel.app}
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sentria
       SPRING_DATASOURCE_USERNAME: ${DB_USER:-sentria}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sentria}

@@ -72,3 +72,27 @@ en `sentria.ia.*` de `application.properties`.
 
 El filtro de emergencia prioriza no perder casos: una frase negada ("no me duele el pecho") también
 activa la alerta. Se acepta ese falso positivo antes que dejar pasar una urgencia.
+
+## Integración con el frontend (sentria_ia-frontend)
+
+El frontend Next.js llama a esta API desde el navegador, así que el backend habilita CORS
+(`config/CorsConfig`) para:
+
+- Local: `http://localhost:3000`
+- Producción (Vercel): `https://sentria-ia-frontend.vercel.app`
+
+Configuración:
+
+- **Orígenes permitidos:** `sentria.cors.allowed-origins` (lista separada por comas, sin `/` final) o la variable
+  `SENTRIA_CORS_ALLOWED_ORIGINS` (`CORS_ALLOWED_ORIGINS` en `docker compose`).
+- **Links de los correos:** `sentria.portal.url` apunta al portal del frontend. En producción:
+  `SENTRIA_PORTAL_URL=https://sentria-ia-frontend.vercel.app`.
+- **Endpoints conectados hoy:** `POST /api/v1/ia/chat` (chat del Centro de Ayuda).
+- **Producción:** el backend tiene que estar publicado con HTTPS; un sitio HTTPS (Vercel) no puede llamar a una API `http://`.
+
+Para levantar ambos en local:
+
+    docker compose up -d            # backend en :8080 + Postgres + Mailpit
+    # en sentria_ia-frontend:
+    cp .env.example .env.local      # NEXT_PUBLIC_API_URL=http://localhost:8080
+    npm run dev                     # frontend en :3000
